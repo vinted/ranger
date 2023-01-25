@@ -24,7 +24,9 @@ import java.security.Principal;
 import java.security.PrivilegedAction;
 import java.security.PrivilegedExceptionAction;
 import java.text.SimpleDateFormat;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -971,8 +973,8 @@ public class MiscUtil {
 			return (Date) value;
 		}
 		try {
-			// TODO: Do proper parsing based on Solr response value
-			return new Date(value.toString());
+			Instant instant = OffsetDateTime.parse(value.toString()).toInstant();
+			return Date.from(instant);
 		} catch (Throwable t) {
 			logger.error("Error converting value to date. Value = " + value, t);
 		}
