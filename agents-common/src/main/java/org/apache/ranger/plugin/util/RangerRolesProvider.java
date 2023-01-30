@@ -36,7 +36,7 @@ import java.io.Writer;
 import java.util.Date;
 import java.util.HashSet;
 
-
+@SuppressWarnings("PMD")
 public class RangerRolesProvider {
 	private static final Logger LOG = LoggerFactory.getLogger(RangerRolesProvider.class);
 
@@ -44,16 +44,13 @@ public class RangerRolesProvider {
 
 	private final String            serviceType;
 	private final String            serviceName;
-	private final RangerAdminClient rangerAdmin;
 
 	private final String            cacheFileName;
 	private final String			cacheFileNamePrefix;
 	private final String            cacheDir;
 	private final Gson              gson;
-	private final boolean           disableCacheIfServiceNotFound;
 
 	private long	lastActivationTimeInMillis;
-	private long    lastKnownRoleVersion = -1L;
 	private boolean rangerUserGroupRolesSetInPlugin;
 	private boolean serviceDefSetInPlugin;
 
@@ -64,7 +61,6 @@ public class RangerRolesProvider {
 
 		this.serviceType = serviceType;
 		this.serviceName = serviceName;
-		this.rangerAdmin = rangerAdmin;
 
 
 		if (StringUtils.isEmpty(appId)) {
@@ -88,7 +84,6 @@ public class RangerRolesProvider {
 		this.gson = gson;
 
 		String propertyPrefix = "ranger.plugin." + serviceType;
-		disableCacheIfServiceNotFound = config.getBoolean(propertyPrefix + ".disable.cache.if.servicenotfound", true);
 
 		if (LOG.isDebugEnabled()) {
 			LOG.debug("<== RangerRolesProvider(serviceName=" + serviceName + ").RangerRolesProvider()");
@@ -119,15 +114,8 @@ public class RangerRolesProvider {
 		}
 
 		try {
-			//load userGroupRoles from ranger admin
-			RangerRoles roles = loadUserGroupRolesFromAdmin();
-
-			if (roles == null) {
-				//if userGroupRoles fetch from ranger Admin Fails, load from cache
-				if (!rangerUserGroupRolesSetInPlugin) {
-					roles = loadUserGroupRolesFromCache();
-				}
-			}
+			//load userGroupRoles from cache
+			RangerRoles roles = loadUserGroupRolesFromCache();
 
 			if (PERF_POLICYENGINE_INIT_LOG.isDebugEnabled()) {
 				long freeMemory = Runtime.getRuntime().freeMemory();
@@ -139,20 +127,11 @@ public class RangerRolesProvider {
 				plugIn.setRoles(roles);
 				rangerUserGroupRolesSetInPlugin = true;
 				setLastActivationTimeInMillis(System.currentTimeMillis());
-				lastKnownRoleVersion = roles.getRoleVersion() != null ? roles.getRoleVersion() : -1;
 			} else {
 				if (!rangerUserGroupRolesSetInPlugin && !serviceDefSetInPlugin) {
 					plugIn.setRoles(null);
 					serviceDefSetInPlugin = true;
 				}
-			}
-		} catch (RangerServiceNotFoundException snfe) {
-			if (disableCacheIfServiceNotFound) {
-				disableCache();
-				plugIn.setRoles(null);
-				setLastActivationTimeInMillis(System.currentTimeMillis());
-				lastKnownRoleVersion = -1L;
-				serviceDefSetInPlugin = true;
 			}
 		} catch (Exception excp) {
 			LOG.error("Encountered unexpected exception, ignoring..", excp);
@@ -163,51 +142,6 @@ public class RangerRolesProvider {
 		if(LOG.isDebugEnabled()) {
 			LOG.debug("<== RangerRolesProvider(serviceName=" + serviceName + ").loadUserGroupRoles()");
 		}
-	}
-
-	private RangerRoles loadUserGroupRolesFromAdmin() throws RangerServiceNotFoundException {
-
-		if(LOG.isDebugEnabled()) {
-			LOG.debug("==> RangerRolesProvider(serviceName=" + serviceName + ").loadUserGroupRolesFromAdmin()");
-		}
-
-		RangerRoles roles;
-
-		RangerPerfTracer perf = null;
-
-		if(RangerPerfTracer.isPerfTraceEnabled(PERF_POLICYENGINE_INIT_LOG)) {
-			perf = RangerPerfTracer.getPerfTracer(PERF_POLICYENGINE_INIT_LOG, "RangerRolesProvider.loadUserGroupRolesFromAdmin(serviceName=" + serviceName + ")");
-		}
-
-		try {
-			roles = rangerAdmin.getRolesIfUpdated(lastKnownRoleVersion, lastActivationTimeInMillis);
-
-			boolean isUpdated = roles != null;
-
-			if(isUpdated) {
-				long newVersion = roles.getRoleVersion() == null ? -1 : roles.getRoleVersion().longValue();
-				saveToCache(roles);
-				LOG.info("RangerRolesProvider(serviceName=" + serviceName + "): found updated version. lastKnownRoleVersion=" + lastKnownRoleVersion + "; newVersion=" + newVersion );
-			} else {
-				if(LOG.isDebugEnabled()) {
-					LOG.debug("RangerRolesProvider(serviceName=" + serviceName + ").run(): no update found. lastKnownRoleVersion=" + lastKnownRoleVersion );
-				}
-			}
-		} catch (RangerServiceNotFoundException snfe) {
-			LOG.error("RangerRolesProvider(serviceName=" + serviceName + "): failed to find service. Will clean up local cache of roles (" + lastKnownRoleVersion + ")", snfe);
-			throw snfe;
-		} catch (Exception excp) {
-			LOG.error("RangerRolesProvider(serviceName=" + serviceName + "): failed to refresh roles. Will continue to use last known version of roles (" + "lastKnowRoleVersion= " + lastKnownRoleVersion, excp);
-			roles = null;
-		}
-
-		RangerPerfTracer.log(perf);
-
-		if(LOG.isDebugEnabled()) {
-			LOG.debug("<== RangerRolesProvider(serviceName=" + serviceName + " serviceType= " + serviceType + " ).loadUserGroupRolesFromAdmin()");
-		 }
-
-		 return roles;
 	}
 
 	private RangerRoles loadUserGroupRolesFromCache() {
@@ -240,8 +174,6 @@ public class RangerRolesProvider {
 
 						roles.setServiceName(serviceName);
 					}
-
-					lastKnownRoleVersion = roles.getRoleVersion() == null ? -1 : roles.getRoleVersion().longValue();
 				}
 			} catch (Exception excp) {
 				LOG.error("failed to load userGroupRoles from cache file " + cacheFile.getAbsolutePath(), excp);
@@ -328,32 +260,6 @@ public class RangerRolesProvider {
 
 		if(LOG.isDebugEnabled()) {
 			LOG.debug("<== RangerRolesProvider.saveToCache(serviceName=" + serviceName + ")");
-		}
-	}
-
-	private void disableCache() {
-		if (LOG.isDebugEnabled()) {
-			LOG.debug("==> RangerRolesProvider.disableCache(serviceName=" + serviceName + ")");
-		}
-
-		File cacheFile = cacheDir == null ? null : new File(cacheDir + File.separator + cacheFileName);
-
-		if(cacheFile != null && cacheFile.isFile() && cacheFile.canRead()) {
-			LOG.warn("Cleaning up local RangerRoles cache");
-			String renamedCacheFile = cacheFile.getAbsolutePath() + "_" + System.currentTimeMillis();
-			if (!cacheFile.renameTo(new File(renamedCacheFile))) {
-				LOG.error("Failed to move " + cacheFile.getAbsolutePath() + " to " + renamedCacheFile);
-			} else {
-				LOG.warn("Moved " + cacheFile.getAbsolutePath() + " to " + renamedCacheFile);
-			}
-		} else {
-			if (LOG.isDebugEnabled()) {
-				LOG.debug("No local RangerRoles cache found. No need to disable it!");
-			}
-		}
-
-		if (LOG.isDebugEnabled()) {
-			LOG.debug("<== RangerRolesProvider.disableCache(serviceName=" + serviceName + ")");
 		}
 	}
 }
