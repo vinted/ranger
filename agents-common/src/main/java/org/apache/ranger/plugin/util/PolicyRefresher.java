@@ -56,7 +56,6 @@ public class PolicyRefresher extends Thread {
 	private final Gson                           gson;
 	private final BlockingQueue<DownloadTrigger> policyDownloadQueue = new LinkedBlockingQueue<>();
 	private       Timer                          policyDownloadTimer;
-	private       long                           lastKnownVersion    = -1L;
 	private       long                           lastActivationTimeInMillis;
 	private       boolean                        policiesSetInPlugin;
 	private       boolean                        serviceDefSetInPlugin;
@@ -243,15 +242,9 @@ public class PolicyRefresher extends Thread {
 		}
 
 		try {
-			//load policy from PolicyAdmin
-			ServicePolicies svcPolicies = loadPolicyfromPolicyAdmin();
+			//load policy from cache
 
-			if (svcPolicies == null) {
-				//if Policy fetch from Policy Admin Fails, load from cache
-				if (!policiesSetInPlugin) {
-					svcPolicies = loadFromCache();
-				}
-			}
+			ServicePolicies svcPolicies = loadFromCache();
 
 			if (PERF_POLICYENGINE_INIT_LOG.isDebugEnabled()) {
 				long freeMemory = Runtime.getRuntime().freeMemory();
@@ -264,22 +257,13 @@ public class PolicyRefresher extends Thread {
 				policiesSetInPlugin = true;
 				serviceDefSetInPlugin = false;
 				setLastActivationTimeInMillis(System.currentTimeMillis());
-				lastKnownVersion = svcPolicies.getPolicyVersion() != null ? svcPolicies.getPolicyVersion() : -1L;
 			} else {
 				if (!policiesSetInPlugin && !serviceDefSetInPlugin) {
 					plugIn.setPolicies(null);
 					serviceDefSetInPlugin = true;
 				}
 			}
-		} catch (RangerServiceNotFoundException snfe) {
-			if (!serviceDefSetInPlugin) {
-				disableCache();
-				plugIn.setPolicies(null);
-				serviceDefSetInPlugin = true;
-				setLastActivationTimeInMillis(System.currentTimeMillis());
-				lastKnownVersion = -1;
-			}
-		} catch (Exception excp) {
+		}  catch (Exception excp) {
 			LOG.error("Encountered unexpected exception, ignoring..", excp);
 		}
 
@@ -289,59 +273,6 @@ public class PolicyRefresher extends Thread {
 			LOG.debug("<== PolicyRefresher(serviceName=" + serviceName + ").loadPolicy()");
 		}
 	}
-
-	private ServicePolicies loadPolicyfromPolicyAdmin() throws RangerServiceNotFoundException {
-
-		if(LOG.isDebugEnabled()) {
-			LOG.debug("==> PolicyRefresher(serviceName=" + serviceName + ").loadPolicyfromPolicyAdmin()");
-		}
-
-		ServicePolicies svcPolicies = null;
-
-		RangerPerfTracer perf = null;
-
-		if(RangerPerfTracer.isPerfTraceEnabled(PERF_POLICYENGINE_INIT_LOG)) {
-			perf = RangerPerfTracer.getPerfTracer(PERF_POLICYENGINE_INIT_LOG, "PolicyRefresher.loadPolicyFromPolicyAdmin(serviceName=" + serviceName + ")");
-		}
-
-		try {
-			svcPolicies = rangerAdmin.getServicePoliciesIfUpdated(lastKnownVersion, lastActivationTimeInMillis);
-
-			boolean isUpdated = svcPolicies != null;
-
-			if(isUpdated) {
-				long newVersion = svcPolicies.getPolicyVersion() == null ? -1 : svcPolicies.getPolicyVersion().longValue();
-
-				if(!StringUtils.equals(serviceName, svcPolicies.getServiceName())) {
-					LOG.warn("PolicyRefresher(serviceName=" + serviceName + "): ignoring unexpected serviceName '" + svcPolicies.getServiceName() + "' in service-store");
-
-					svcPolicies.setServiceName(serviceName);
-				}
-
-				LOG.info("PolicyRefresher(serviceName=" + serviceName + "): found updated version. lastKnownVersion=" + lastKnownVersion + "; newVersion=" + newVersion);
-
-			} else {
-				if(LOG.isDebugEnabled()) {
-					LOG.debug("PolicyRefresher(serviceName=" + serviceName + ").run(): no update found. lastKnownVersion=" + lastKnownVersion);
-				}
-			}
-		} catch (RangerServiceNotFoundException snfe) {
-			LOG.error("PolicyRefresher(serviceName=" + serviceName + "): failed to find service. Will clean up local cache of policies (" + lastKnownVersion + ")", snfe);
-			throw snfe;
-		} catch (Exception excp) {
-			LOG.error("PolicyRefresher(serviceName=" + serviceName + "): failed to refresh policies. Will continue to use last known version of policies (" + lastKnownVersion + ")", excp);
-			svcPolicies = null;
-		}
-
-		RangerPerfTracer.log(perf);
-
-		if(LOG.isDebugEnabled()) {
-			LOG.debug("<== PolicyRefresher(serviceName=" + serviceName + ").loadPolicyfromPolicyAdmin()");
-		 }
-
-		 return svcPolicies;
-	}
-
 
 	private ServicePolicies loadFromCache() {
 
@@ -373,8 +304,6 @@ public class PolicyRefresher extends Thread {
 
 		        		policies.setServiceName(serviceName);
 		        	}
-
-		        	lastKnownVersion = policies.getPolicyVersion() == null ? -1 : policies.getPolicyVersion().longValue();
 		         }
 	        } catch (Exception excp) {
 	        	LOG.error("failed to load policies from cache file " + cacheFile.getAbsolutePath(), excp);
@@ -457,32 +386,6 @@ public class PolicyRefresher extends Thread {
 
 		if(LOG.isDebugEnabled()) {
 			LOG.debug("<== PolicyRefresher(serviceName=" + serviceName + ").saveToCache()");
-		}
-	}
-
-	private void disableCache() {
-		if (LOG.isDebugEnabled()) {
-			LOG.debug("==> PolicyRefresher.disableCache(serviceName=" + serviceName + ")");
-		}
-
-		File cacheFile = cacheDir == null ? null : new File(cacheDir + File.separator + cacheFileName);
-
-		if(cacheFile != null && cacheFile.isFile() && cacheFile.canRead()) {
-			LOG.warn("Cleaning up local cache");
-			String renamedCacheFile = cacheFile.getAbsolutePath() + "_" + System.currentTimeMillis();
-			if (!cacheFile.renameTo(new File(renamedCacheFile))) {
-				LOG.error("Failed to move " + cacheFile.getAbsolutePath() + " to " + renamedCacheFile);
-			} else {
-				LOG.warn("Moved " + cacheFile.getAbsolutePath() + " to " + renamedCacheFile);
-			}
-		} else {
-			if (LOG.isDebugEnabled()) {
-				LOG.debug("No local policy cache found. No need to disable it!");
-			}
-		}
-
-		if (LOG.isDebugEnabled()) {
-			LOG.debug("<== PolicyRefresher.disableCache(serviceName=" + serviceName + ")");
 		}
 	}
 
