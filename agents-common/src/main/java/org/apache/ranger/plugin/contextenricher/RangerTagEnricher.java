@@ -967,26 +967,12 @@ public class RangerTagEnricher extends RangerAbstractContextEnricher {
 		}
 
 		private void populateTags() throws InterruptedException {
-
 			if (tagEnricher != null) {
 				ServiceTags serviceTags;
-
 				try {
-					serviceTags = tagRetriever.retrieveTags(lastKnownVersion, lastActivationTimeInMillis);
-
-					if (serviceTags == null) {
-						if (!hasProvidedTagsToReceiver) {
-							serviceTags = loadFromCache();
-						}
-					} else if (!serviceTags.getIsDelta()) {
-						saveToCache(serviceTags);
-					}
-
+					serviceTags = loadFromCache();
 					if (serviceTags != null) {
 						tagEnricher.setServiceTags(serviceTags);
-						if (serviceTags.getIsDelta() && serviceTags.getTagVersion() != -1L) {
-							saveToCache(tagEnricher.enrichedServiceTags.serviceTags);
-						}
 						LOG.info("RangerTagRefresher(serviceName=" + tagRetriever.getServiceName() + ").populateTags() - Updated tags-cache to new version of tags, lastKnownVersion=" + lastKnownVersion + "; newVersion="
 								+ (serviceTags.getTagVersion() == null ? -1L : serviceTags.getTagVersion()));
 						hasProvidedTagsToReceiver = true;
@@ -997,18 +983,6 @@ public class RangerTagEnricher extends RangerAbstractContextEnricher {
 							LOG.debug("RangerTagRefresher(serviceName=" + tagRetriever.getServiceName() + ").populateTags() - No need to update tags-cache. lastKnownVersion=" + lastKnownVersion);
 						}
 					}
-				} catch (RangerServiceNotFoundException snfe) {
-					LOG.error("Caught ServiceNotFound exception :", snfe);
-
-					// Need to clean up local tag cache
-					if (tagEnricher.disableCacheIfServiceNotFound) {
-						disableCache();
-						tagEnricher.setServiceTags(null);
-						setLastActivationTimeInMillis(System.currentTimeMillis());
-						lastKnownVersion = -1L;
-					}
-				} catch (InterruptedException interruptedException) {
-					throw interruptedException;
 				} catch (Exception e) {
 					LOG.error("RangerTagRefresher(serviceName=" + tagRetriever.getServiceName() + ").populateTags(): Encountered unexpected exception. Ignoring", e);
 				}
