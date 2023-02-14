@@ -419,10 +419,6 @@ public class RangerBasePlugin {
 					if (oldPolicyEngine != null && oldPolicyEngine != newPolicyEngine) {
 						((RangerPolicyEngineImpl) oldPolicyEngine).releaseResources(!isPolicyEngineShared);
 					}
-
-					if (this.refresher != null) {
-						this.refresher.saveToCache(usePolicyDeltas ? servicePolicies : policies);
-					}
 				}
 
 			} else {
