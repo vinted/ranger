@@ -58,6 +58,10 @@ if [ $build_image -eq 1 ]; then
 docker build -t $image_name - <<Dockerfile
 FROM centos
 
+RUN cd /etc/yum.repos.d/
+RUN sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
+RUN sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
+
 RUN mkdir /tools
 WORKDIR /tools
 
@@ -67,45 +71,56 @@ RUN yum install -y wget
 RUN yum install -y git
 RUN yum install -y gcc
 RUN yum install -y bzip2 fontconfig
+RUN yum install -y diffutils
+RUN yum install -y python3
 
-#Download and install JDK8 from AWS s3's docker-assets 
-RUN wget https://s3.eu-central-1.amazonaws.com/docker-assets/dist/jdk-8u101-linux-x64.rpm
-RUN rpm -i jdk-8u101-linux-x64.rpm
+RUN ln -s /usr/bin/python3 /usr/bin/python
 
-ENV JAVA_HOME /usr/java/latest
-ENV  PATH $JAVA_HOME/bin:$PATH
+RUN yum install -y java-1.8.0-openjdk java-1.8.0-openjdk-devel
+#ENV JAVA_HOME /etc/alternatives/jre
+ENV JAVA_HOME /usr/lib/jvm/java-1.8.0-openjdk/
+ENV PATH $JAVA_HOME/bin:$PATH
 
+#Download and install JDK8 from AWS s3's docker-assets
+#RUN wget https://s3.eu-central-1.amazonaws.com/docker-assets/dist/jdk-8u101-linux-x64.rpm
+#RUN rpm -i jdk-8u101-linux-x64.rpm
+#ENV JAVA_HOME /usr/java/latest
+#ENV  PATH $JAVA_HOME/bin:$PATH
 
-ADD https://www.apache.org/dist/maven/maven-3/3.5.4/binaries/apache-maven-3.5.4-bin.tar.gz.sha512 /tools
-ADD http://www-us.apache.org/dist/maven/maven-3/3.5.4/binaries/apache-maven-3.5.4-bin.tar.gz /tools
-RUN sha512sum  apache-maven-3.5.4-bin.tar.gz | cut -f 1 -d " " > tmp.sha1
+ADD https://dlcdn.apache.org/maven/maven-3/3.6.3/binaries/apache-maven-3.6.3-bin.tar.gz.sha512 /tools
+ADD https://dlcdn.apache.org/maven/maven-3/3.6.3/binaries/apache-maven-3.6.3-bin.tar.gz /tools
+RUN sha512sum  apache-maven-3.6.3-bin.tar.gz | cut -f 1 -d " " > tmp.sha1
 
-RUN diff -w tmp.sha1 apache-maven-3.5.4-bin.tar.gz.sha512
+RUN cat apache-maven-3.6.3-bin.tar.gz.sha512 | cut -f 1 -d " " > tmp.sha1.download
 
-RUN tar xfz apache-maven-3.5.4-bin.tar.gz
-RUN ln -sf /tools/apache-maven-3.5.4 /tools/maven
+RUN diff -w tmp.sha1 tmp.sha1.download
 
-ENV  PATH /tools/maven/bin:$PATH
+RUN tar xfz apache-maven-3.6.3-bin.tar.gz
+RUN ln -sf /tools/apache-maven-3.6.3 /tools/maven
+
+ENV PATH /usr/sbin:/tools/maven/bin:$PATH
 ENV MAVEN_OPTS "-Xmx2048m -XX:MaxPermSize=512m"
 
 # Setup gosu for easier command execution
-RUN gpg --keyserver pool.sks-keyservers.net --recv-keys B42F6819007F00F88E364FD4036A9C25BF357DD4 \
-    && curl -o /usr/local/bin/gosu -SL "https://github.com/tianon/gosu/releases/download/1.10/gosu-amd64" \
-    && curl -o /usr/local/bin/gosu.asc -SL "https://github.com/tianon/gosu/releases/download/1.10/gosu-amd64.asc" \
-    && gpg --verify /usr/local/bin/gosu.asc \
-    && rm /usr/local/bin/gosu.asc \
-    && rm -r /root/.gnupg/ \
-    && chmod +x /usr/local/bin/gosu
+ RUN gpg --keyserver hkps://keys.openpgp.org --recv-keys B42F6819007F00F88E364FD4036A9C25BF357DD4 \
+     && curl -o /usr/local/bin/gosu -SL "https://github.com/tianon/gosu/releases/download/1.10/gosu-amd64" \
+     && curl -o /usr/local/bin/gosu.asc -SL "https://github.com/tianon/gosu/releases/download/1.10/gosu-amd64.asc" \
+     && gpg --verify /usr/local/bin/gosu.asc \
+     && rm /usr/local/bin/gosu.asc \
+     && rm -r /root/.gnupg/ \
+     && chmod +x /usr/local/bin/gosu
 
 RUN useradd -ms /bin/bash builder
 RUN usermod -g root builder
 RUN mkdir -p /scripts
+RUN mkdir -p /home/builder/.m2/repository
 
 RUN echo "#!/bin/bash" > /scripts/mvn.sh
 RUN echo 'set -x; if [ "\$1" = "mvn" ]; then usermod -u \$(stat -c "%u" pom.xml) builder; gosu builder bash -c '"'"'ln -sf /.m2 \$HOME'"'"'; exec gosu builder "\$@"; fi; exec "\$@" ' >> /scripts/mvn.sh
 
 RUN chmod -R 777 /scripts
 RUN chmod -R 777 /tools
+RUN chmod -R 777 /home
 
 ENTRYPOINT ["/scripts/mvn.sh"]
 Dockerfile

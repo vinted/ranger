@@ -39,7 +39,7 @@ import org.slf4j.LoggerFactory;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
-
+@SuppressWarnings("PMD")
 public class PolicyRefresher extends Thread {
 	private static final Logger LOG = LoggerFactory.getLogger(PolicyRefresher.class);
 
@@ -243,15 +243,9 @@ public class PolicyRefresher extends Thread {
 		}
 
 		try {
-			//load policy from PolicyAdmin
-			ServicePolicies svcPolicies = loadPolicyfromPolicyAdmin();
+			//load policy from cache
 
-			if (svcPolicies == null) {
-				//if Policy fetch from Policy Admin Fails, load from cache
-				if (!policiesSetInPlugin) {
-					svcPolicies = loadFromCache();
-				}
-			}
+			ServicePolicies svcPolicies = loadFromCache();
 
 			if (PERF_POLICYENGINE_INIT_LOG.isDebugEnabled()) {
 				long freeMemory = Runtime.getRuntime().freeMemory();
@@ -271,15 +265,7 @@ public class PolicyRefresher extends Thread {
 					serviceDefSetInPlugin = true;
 				}
 			}
-		} catch (RangerServiceNotFoundException snfe) {
-			if (!serviceDefSetInPlugin) {
-				disableCache();
-				plugIn.setPolicies(null);
-				serviceDefSetInPlugin = true;
-				setLastActivationTimeInMillis(System.currentTimeMillis());
-				lastKnownVersion = -1;
-			}
-		} catch (Exception excp) {
+		}  catch (Exception excp) {
 			LOG.error("Encountered unexpected exception, ignoring..", excp);
 		}
 

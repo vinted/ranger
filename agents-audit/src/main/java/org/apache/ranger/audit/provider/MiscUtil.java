@@ -24,7 +24,9 @@ import java.security.Principal;
 import java.security.PrivilegedAction;
 import java.security.PrivilegedExceptionAction;
 import java.text.SimpleDateFormat;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -63,6 +65,7 @@ import com.google.gson.GsonBuilder;
 
 import static org.apache.hadoop.util.PlatformName.IBM_JAVA;
 
+@SuppressWarnings("PMD")
 public class MiscUtil {
 	private static final Logger logger = LoggerFactory.getLogger(MiscUtil.class);
 
@@ -355,7 +358,7 @@ public class MiscUtil {
 	}
 
 	public static boolean getBooleanProperty(Properties props, String propName,
-			boolean defValue) {
+											 boolean defValue) {
 		boolean ret = defValue;
 
 		if (props != null && propName != null) {
@@ -370,7 +373,7 @@ public class MiscUtil {
 	}
 
 	public static int getIntProperty(Properties props, String propName,
-			int defValue) {
+									 int defValue) {
 		int ret = defValue;
 
 		if (props != null && propName != null) {
@@ -388,7 +391,7 @@ public class MiscUtil {
 	}
 
 	public static long getLongProperty(Properties props, String propName,
-			long defValue) {
+									   long defValue) {
 		long ret = defValue;
 
 		if (props != null && propName != null) {
@@ -406,7 +409,7 @@ public class MiscUtil {
 	}
 
 	public static Map<String, String> getPropertiesWithPrefix(Properties props,
-			String prefix) {
+															  String prefix) {
 		Map<String, String> prefixedProperties = new HashMap<String, String>();
 
 		if (props != null && prefix != null) {
@@ -476,7 +479,7 @@ public class MiscUtil {
 				logger.info("Default UGI before using new Subject:"
 						+ UserGroupInformation.getLoginUser());
 			} catch (Throwable t) {
-				logger.error("", t);
+				logger.error("failed to get login user", t);
 			}
 			ugi = UserGroupInformation.getUGIFromSubject(subject);
 			logger.info("SUBJECT.UGI.NAME=" + ugi.getUserName() + ", ugi="
@@ -492,7 +495,7 @@ public class MiscUtil {
 	 * @param newSubject
 	 */
 	public static void setUGILoginUser(UserGroupInformation newUGI,
-			Subject newSubject) {
+									   Subject newSubject) {
 		if (newUGI != null) {
 			UserGroupInformation.setLoginUser(newUGI);
 			ugiLoginUser = newUGI;
@@ -526,7 +529,7 @@ public class MiscUtil {
 
 		if(ret != null) {
 			try {
-			ret.checkTGTAndReloginFromKeytab();
+				ret.checkTGTAndReloginFromKeytab();
 			} catch(IOException ioe) {
 				logger.error("Error renewing TGT and relogin. Ignoring Exception, and continuing with the old TGT", ioe);
 			}
@@ -616,7 +619,7 @@ public class MiscUtil {
 	}
 
 	static public boolean logErrorMessageByInterval(Logger useLogger,
-			String message) {
+													String message) {
 		return logErrorMessageByInterval(useLogger, message, null);
 	}
 
@@ -626,10 +629,10 @@ public class MiscUtil {
 	 * @param e
 	 */
 	static public boolean logErrorMessageByInterval(Logger useLogger,
-			String message, Throwable e) {
-        if (message == null) {
-            return false;
-        }
+													String message, Throwable e) {
+		if (message == null) {
+			return false;
+		}
 
 		LogHistory log = logHistoryList.get(message);
 		if (log == null) {
@@ -701,7 +704,7 @@ public class MiscUtil {
 	}
 
 	public static void authWithKerberos(String keytab, String principal,
-			String nameRules) {
+										String nameRules) {
 
 		if (keytab == null || principal == null) {
 			return;
@@ -728,7 +731,7 @@ public class MiscUtil {
 			boolean useKeytab = true;
 			if (!useKeytab) {
 				logger.info("Creating UGI with subject");
-                                LoginContext loginContext = null;
+				LoginContext loginContext = null;
 				List<LoginContext> loginContexts = new ArrayList<LoginContext>();
 				for (String spnegoPrincipal : spnegoPrincipals) {
 					try {
@@ -736,7 +739,7 @@ public class MiscUtil {
 								+ ", for principal " + spnegoPrincipal);
 						final KerberosConfiguration kerberosConfiguration = new KerberosConfiguration(
 								keytab, spnegoPrincipal);
-                                                loginContext = new LoginContext("",
+						loginContext = new LoginContext("",
 								serverSubject, null, kerberosConfiguration);
 						loginContext.login();
 						successLoginCount++;
@@ -761,10 +764,10 @@ public class MiscUtil {
 						} catch (Throwable e) {
 							logger.error("Error creating UGI from subject. subject="
 									+ serverSubject);
-                                                } finally {
-                                                        if (loginContext != null) {
-                                                                loginContext.logout();
-                                                        }
+						} finally {
+							if (loginContext != null) {
+								loginContext.logout();
+							}
 						}
 					} else {
 						logger.error("Total logins were successfull from keytab="
@@ -784,6 +787,45 @@ public class MiscUtil {
 			logger.error("Failed to login with given keytab and principal", t);
 		}
 
+	}
+
+	public static void loginWithKeyTab(String keytab, String principal, String nameRules) {
+		if (logger.isDebugEnabled()) {
+			logger.debug("==> MiscUtil.loginWithKeyTab() keytab= " + keytab + "principal= " + principal + "nameRules= " + nameRules);
+		}
+
+		if (keytab == null || principal == null) {
+			logger.error("Failed to login as keytab or principal is null!");
+			return;
+		}
+
+		String[]             spnegoPrincipals;
+		UserGroupInformation ugi;
+
+		try {
+			if (principal.equals("*")) {
+				spnegoPrincipals = KerberosUtil.getPrincipalNames(keytab, Pattern.compile("HTTP/.*"));
+				if (spnegoPrincipals.length == 0) {
+					logger.error("No principals found in keytab= " + keytab);
+				}
+			} else {
+				spnegoPrincipals = new String[] { principal };
+			}
+
+			if (nameRules != null) {
+				KerberosName.setRules(nameRules);
+			}
+
+			logger.info("Creating UGI from keytab directly. keytab= " + keytab + ", principal= " + spnegoPrincipals[0]);
+			ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(spnegoPrincipals[0], keytab);
+			MiscUtil.setUGILoginUser(ugi, null);
+		} catch (Exception e) {
+			logger.error("Failed to login with given keytab= " + keytab + "principal= " + principal + "nameRules= " + nameRules, e);
+		}
+
+		if (logger.isDebugEnabled()) {
+			logger.debug("<== MiscUtil.loginWithKeyTab()");
+		}
 	}
 
 	static class LogHistory {
@@ -874,12 +916,12 @@ public class MiscUtil {
 	}
 	public static Date getUTCDate() {
 		TimeZone gmtTimeZone = TimeZone.getTimeZone("GMT+0");
-	    Calendar local  = Calendar.getInstance();
-	    int      offset = local.getTimeZone().getOffset(local.getTimeInMillis());
-	    GregorianCalendar utc = new GregorianCalendar(gmtTimeZone);
-	    utc.setTimeInMillis(local.getTimeInMillis());
-	    utc.add(Calendar.MILLISECOND, -offset);
-	    return utc.getTime();
+		Calendar local  = Calendar.getInstance();
+		int      offset = local.getTimeZone().getOffset(local.getTimeInMillis());
+		GregorianCalendar utc = new GregorianCalendar(gmtTimeZone);
+		utc.setTimeInMillis(local.getTimeInMillis());
+		utc.add(Calendar.MILLISECOND, -offset);
+		return utc.getTime();
 	}
 
 	// use Holder class to defer initialization until needed
@@ -932,8 +974,8 @@ public class MiscUtil {
 			return (Date) value;
 		}
 		try {
-			// TODO: Do proper parsing based on Solr response value
-			return new Date(value.toString());
+			Instant instant = OffsetDateTime.parse(value.toString()).toInstant();
+			return Date.from(instant);
 		} catch (Throwable t) {
 			logger.error("Error converting value to date. Value = " + value, t);
 		}

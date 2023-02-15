@@ -30,7 +30,7 @@
     <parent>
         <artifactId>ranger</artifactId>
         <groupId>org.apache.ranger</groupId>
-        <version>2.3.0</version>
+        <version>2.3.0-vinted-4</version>
         <relativePath>..</relativePath>
     </parent>
     <dependencies>

@@ -24,7 +24,7 @@
     </parent>
     <groupId>org.apache.ranger</groupId>
     <artifactId>ranger</artifactId>
-    <version>2.3.0</version>
+    <version>2.3.0-vinted-4</version>
     <description>Security for Enforcing Enterprise Policies</description>
     <packaging>pom</packaging>
     <name>ranger</name>
@@ -191,7 +191,7 @@
         <servlet.api.version>2.5</servlet.api.version>
         <slf4j-api.version>1.7.32</slf4j-api.version>
         <slf4j.version>1.7.32</slf4j.version>
-        <solr.version>8.6.3</solr.version>
+        <solr.version>8.11.2</solr.version>
         <spring-ldap-core.version>2.3.5.RELEASE</spring-ldap-core.version>
         <springframework.security.version>5.6.1</springframework.security.version>
         <springframework.test.version>5.3.18</springframework.test.version>

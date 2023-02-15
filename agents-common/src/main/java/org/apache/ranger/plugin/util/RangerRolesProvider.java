@@ -36,7 +36,7 @@ import java.io.Writer;
 import java.util.Date;
 import java.util.HashSet;
 
-
+@SuppressWarnings("PMD")
 public class RangerRolesProvider {
 	private static final Logger LOG = LoggerFactory.getLogger(RangerRolesProvider.class);
 
@@ -120,14 +120,7 @@ public class RangerRolesProvider {
 
 		try {
 			//load userGroupRoles from ranger admin
-			RangerRoles roles = loadUserGroupRolesFromAdmin();
-
-			if (roles == null) {
-				//if userGroupRoles fetch from ranger Admin Fails, load from cache
-				if (!rangerUserGroupRolesSetInPlugin) {
-					roles = loadUserGroupRolesFromCache();
-				}
-			}
+			RangerRoles roles = loadUserGroupRolesFromCache();
 
 			if (PERF_POLICYENGINE_INIT_LOG.isDebugEnabled()) {
 				long freeMemory = Runtime.getRuntime().freeMemory();
@@ -145,14 +138,6 @@ public class RangerRolesProvider {
 					plugIn.setRoles(null);
 					serviceDefSetInPlugin = true;
 				}
-			}
-		} catch (RangerServiceNotFoundException snfe) {
-			if (disableCacheIfServiceNotFound) {
-				disableCache();
-				plugIn.setRoles(null);
-				setLastActivationTimeInMillis(System.currentTimeMillis());
-				lastKnownRoleVersion = -1L;
-				serviceDefSetInPlugin = true;
 			}
 		} catch (Exception excp) {
 			LOG.error("Encountered unexpected exception, ignoring..", excp);

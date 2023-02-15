@@ -67,6 +67,7 @@ import org.slf4j.LoggerFactory;
 import javax.servlet.http.HttpServletRequest;
 import org.apache.solr.security.PermissionNameProvider;
 
+@SuppressWarnings("PMD")
 public class RangerSolrAuthorizer extends SearchComponent implements AuthorizationPlugin {
 	private static final Logger logger = LoggerFactory
 			.getLogger(RangerSolrAuthorizer.class);
@@ -475,9 +476,6 @@ public class RangerSolrAuthorizer extends SearchComponent implements Authorizati
 		if (httpServletRequest == null) {
 			SolrCore solrCore = rb.req.getCore();
 			StringBuilder builder = new StringBuilder("Unable to locate HttpServletRequest");
-			if (solrCore != null && !solrCore.getSolrConfig().getBool("requestDispatcher/requestParsers/@addHttpRequestToContext", true)) {
-				builder.append(", ensure requestDispatcher/requestParsers/@addHttpRequestToContext is set to true in solrconfig.xml");
-			}
 			throw new SolrException(SolrException.ErrorCode.UNAUTHORIZED, builder.toString());
 		}
 		String ip = null;
@@ -758,9 +756,6 @@ public class RangerSolrAuthorizer extends SearchComponent implements Authorizati
 		HttpServletRequest httpServletRequest = (HttpServletRequest) req.getContext().get("httpRequest");
 		if (httpServletRequest == null) {
 			StringBuilder builder = new StringBuilder("Unable to locate HttpServletRequest");
-			if (solrCore != null && !solrCore.getSolrConfig().getBool("requestDispatcher/requestParsers/@addHttpRequestToContext", true)) {
-				builder.append(", ensure requestDispatcher/requestParsers/@addHttpRequestToContext is set to true in solrconfig.xml");
-			}
 			throw new SolrException(SolrException.ErrorCode.UNAUTHORIZED, builder.toString());
 		}
 
