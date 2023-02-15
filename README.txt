@@ -1,3 +1,6 @@
+CHECKOUT vinted/ranger-2.3
+
+
 artifacts we use:
 - ranger-plugins-cred-<version>.jar
 - ranger-plugins-common-<version>.jar
